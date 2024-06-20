@@ -1,5 +1,6 @@
 package com.ada.javataskmanagement.comment.service;
 
+import com.ada.javataskmanagement.comment.dto.CommentDTO;
 import com.ada.javataskmanagement.comment.model.Comment;
 import com.ada.javataskmanagement.comment.repository.CommentRepository;
 import com.ada.javataskmanagement.task.model.Task;
@@ -11,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -21,7 +21,6 @@ public class CommentService {
     private final TaskRepository taskRepository;
     private final WorkerService workerService;
     private final WorkerProjectRepository workerProjectRepository;
-
     private final Clock clock;
 
     public CommentService(CommentRepository commentRepository, TaskRepository taskRepository, WorkerService workerService, WorkerProjectRepository workerProjectRepository, Clock clock) {
@@ -32,21 +31,40 @@ public class CommentService {
         this.clock = clock;
     }
 
-    public Comment addComment(UUID taskId, Comment comment) {
+    public Comment addComment(UUID taskId, CommentDTO commentDTO) {
         Task task = taskRepository.findById(taskId).orElseThrow(() -> new IllegalArgumentException("Task not found"));
-        Worker worker = workerService.findWorkerById(comment.getUuid());
+        Worker worker = workerService.findWorkerById(commentDTO.getAuthorId());
 
-        boolean isWorkerInProject = workerProjectRepository.existsByWorkerUuidAndProjectUuid(comment.getUuid(), task.getProject().getUuid());
+        boolean isWorkerInProject = workerProjectRepository.existsByWorkerUuidAndProjectUuid(commentDTO.getAuthorId(), task.getProject().getUuid());
         if (!isWorkerInProject) {
             throw new IllegalArgumentException("Worker does not belong to this project");
         }
 
-        Comment newComment = new Comment();
+        Comment newComment = convertToEntity(commentDTO);
         newComment.setCreatedAt(LocalDateTime.now(clock));
-        newComment.setContent(comment.getContent());
-        newComment.setAuthor(worker);
         newComment.setTask(task);
+        newComment.setAuthor(worker);
 
         return commentRepository.save(newComment);
+    }
+
+    public CommentDTO convertToDTO(Comment comment) {
+        CommentDTO commentDTO = new CommentDTO();
+        commentDTO.setUuid(comment.getUuid());
+        commentDTO.setCreatedAt(comment.getCreatedAt());
+        commentDTO.setModifiedAt(comment.getModifiedAt());
+        commentDTO.setContent(comment.getContent());
+        commentDTO.setAuthorId(comment.getAuthor().getUuid());
+        commentDTO.setTaskId(comment.getTask().getUuid());
+        return commentDTO;
+    }
+
+    public Comment convertToEntity(CommentDTO commentDTO) {
+        Comment comment = new Comment();
+        comment.setUuid(commentDTO.getUuid());
+        comment.setContent(commentDTO.getContent());
+        comment.setCreatedAt(commentDTO.getCreatedAt());
+        comment.setModifiedAt(commentDTO.getModifiedAt());
+        return comment;
     }
 }

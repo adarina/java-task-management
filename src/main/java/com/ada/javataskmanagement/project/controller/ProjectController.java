@@ -1,7 +1,10 @@
 package com.ada.javataskmanagement.project.controller;
 
+import com.ada.javataskmanagement.project.dto.ProjectDTO;
 import com.ada.javataskmanagement.project.model.Project;
 import com.ada.javataskmanagement.project.service.ProjectService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,23 +20,38 @@ public class ProjectController {
         this.projectService = projectService;
     }
 
-    @PostMapping("/{projectId}/add-worker")
-    public Project addWorkerToProject(@PathVariable UUID projectId, @RequestParam UUID workerId) {
-        return projectService.addWorkerToProject(projectId, workerId);
+    @PostMapping("/{projectId}/add-worker/{workerId}")
+    public ResponseEntity<ProjectDTO> addWorkerToProject(@PathVariable UUID projectId, @PathVariable UUID workerId) {
+        Project project = projectService.addWorkerToProject(projectId, workerId);
+        ProjectDTO projectDTO = projectService.convertToDTO(project);
+        return ResponseEntity.ok(projectDTO);
     }
 
     @PostMapping
-    public Project addProject(@RequestBody Project project) {
-        return projectService.addProject(project);
+    public ResponseEntity<ProjectDTO> addProject(@RequestBody ProjectDTO projectDTO) {
+        Project project = projectService.convertToEntity(projectDTO);
+        Project savedProject = projectService.addProject(project);
+        ProjectDTO savedProjectDTO = projectService.convertToDTO(savedProject);
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedProjectDTO);
     }
 
     @GetMapping("/{id}")
-    public Project getProject(@PathVariable UUID id) {
-        return projectService.findProjectById(id);
+    public ResponseEntity<ProjectDTO> getProject(@PathVariable UUID id) {
+        Project project = projectService.findProjectById(id);
+        if (project != null) {
+            ProjectDTO projectDTO = projectService.convertToDTO(project);
+            return ResponseEntity.ok(projectDTO);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @GetMapping
-    public List<Project> getAllProjects() {
-        return projectService.getAllProjects();
+    public ResponseEntity<List<ProjectDTO>> getAllProjects() {
+        List<Project> projects = projectService.getAllProjects();
+        List<ProjectDTO> projectDTOs = projects.stream()
+                .map(projectService::convertToDTO)
+                .toList();
+        return ResponseEntity.ok(projectDTOs);
     }
 }

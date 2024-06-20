@@ -1,5 +1,6 @@
 package com.ada.javataskmanagement.project.service;
 
+import com.ada.javataskmanagement.project.dto.ProjectDTO;
 import com.ada.javataskmanagement.project.model.Project;
 import com.ada.javataskmanagement.project.repository.ProjectRepository;
 import com.ada.javataskmanagement.worker.model.Worker;
@@ -52,5 +53,20 @@ public class ProjectService {
 
     public List<Project> getAllProjects() {
         return projectRepository.findAll();
+    }
+
+    public ProjectDTO convertToDTO(Project project) {
+        ProjectDTO projectDTO = new ProjectDTO();
+        projectDTO.setUuid(project.getUuid());
+        projectDTO.setName(project.getName());
+        projectDTO.setDescription(project.getDescription());
+        return projectDTO;
+    }
+
+    public Project convertToEntity(ProjectDTO projectDTO) {
+        Project project = new Project();
+        project.setName(projectDTO.getName());
+        project.setDescription(projectDTO.getDescription());
+        return project;
     }
 }

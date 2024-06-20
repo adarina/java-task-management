@@ -1,5 +1,7 @@
 package com.ada.javataskmanagement.task.controller;
 
+import com.ada.javataskmanagement.task.dto.TaskDTO;
+import com.ada.javataskmanagement.task.dto.TaskStatusDTO;
 import com.ada.javataskmanagement.task.model.Task;
 import com.ada.javataskmanagement.task.model.TaskStatus;
 import com.ada.javataskmanagement.task.service.TaskService;
@@ -20,38 +22,47 @@ public class TaskController {
     }
 
     @PostMapping("/create")
-    public ResponseEntity<Task> createTask(@RequestBody Task task, @RequestParam UUID workerId) {
-        Task createdTask = taskService.createTask(task, workerId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(createdTask);
+    public ResponseEntity<TaskDTO> createTask(@RequestBody TaskDTO taskDTO) {
+        Task task = taskService.convertToEntity(taskDTO);
+        Task createdTask = taskService.createTask(task);
+        TaskDTO createdTaskDTO = taskService.convertToDTO(createdTask);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdTaskDTO);
     }
 
     @PostMapping("/{taskId}/set-default-status")
-    public ResponseEntity<Task> setDefaultStatus(@PathVariable UUID taskId) {
+    public ResponseEntity<TaskDTO> setDefaultStatus(@PathVariable UUID taskId) {
         Task updatedTask = taskService.setDefaultStatus(taskId, TaskStatus.TO_DO);
-        return ResponseEntity.ok(updatedTask);
+        TaskDTO updatedTaskDTO = taskService.convertToDTO(updatedTask);
+        return ResponseEntity.ok(updatedTaskDTO);
     }
 
     @PostMapping("/{taskId}/set-priority")
-    public ResponseEntity<Task> setPriority(@PathVariable UUID taskId, @RequestParam TaskStatus status) {
+    public ResponseEntity<TaskDTO> setPriority(@PathVariable UUID taskId, @RequestBody TaskStatusDTO statusDTO) {
+        TaskStatus status = TaskStatus.valueOf(statusDTO.getStatus());
         Task updatedTask = taskService.setPriority(taskId, status);
-        return ResponseEntity.ok(updatedTask);
+        TaskDTO updatedTaskDTO = taskService.convertToDTO(updatedTask);
+        return ResponseEntity.ok(updatedTaskDTO);
     }
 
     @PostMapping("/{taskId}/add-description")
-    public ResponseEntity<Task> addDescription(@PathVariable UUID taskId, @RequestParam String description) {
+    public ResponseEntity<TaskDTO> addDescription(@PathVariable UUID taskId, @RequestBody String description) {
         Task updatedTask = taskService.addDescription(taskId, description);
-        return ResponseEntity.ok(updatedTask);
+        TaskDTO updatedTaskDTO = taskService.convertToDTO(updatedTask);
+        return ResponseEntity.ok(updatedTaskDTO);
     }
 
     @PostMapping("/{taskId}/set-status")
-    public ResponseEntity<Task> setStatus(@PathVariable UUID taskId, @RequestParam TaskStatus status) {
+    public ResponseEntity<TaskDTO> setStatus(@PathVariable UUID taskId, @RequestBody TaskStatusDTO statusDTO) {
+        TaskStatus status = TaskStatus.valueOf(statusDTO.getStatus());
         Task updatedTask = taskService.setStatus(taskId, status);
-        return ResponseEntity.ok(updatedTask);
+        TaskDTO updatedTaskDTO = taskService.convertToDTO(updatedTask);
+        return ResponseEntity.ok(updatedTaskDTO);
     }
 
-    @PostMapping("/{taskId}/assign-worker")
-    public ResponseEntity<Task> assignWorker(@PathVariable UUID taskId, @RequestParam UUID workerId) {
+    @PostMapping("/{taskId}/assign-worker/{workerId}")
+    public ResponseEntity<TaskDTO> assignWorker(@PathVariable UUID taskId, @PathVariable UUID workerId) {
         Task updatedTask = taskService.assignWorker(taskId, workerId);
-        return ResponseEntity.ok(updatedTask);
+        TaskDTO updatedTaskDTO = taskService.convertToDTO(updatedTask);
+        return ResponseEntity.ok(updatedTaskDTO);
     }
 }

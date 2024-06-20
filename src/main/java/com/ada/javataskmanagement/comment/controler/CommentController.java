@@ -1,12 +1,11 @@
 package com.ada.javataskmanagement.comment.controler;
 
+import com.ada.javataskmanagement.comment.dto.CommentDTO;
 import com.ada.javataskmanagement.comment.model.Comment;
 import com.ada.javataskmanagement.comment.service.CommentService;
-import com.ada.javataskmanagement.task.service.TaskService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -20,8 +19,9 @@ public class CommentController {
     }
 
     @PostMapping
-    public ResponseEntity<Comment> addComment(@PathVariable UUID taskId, @RequestBody Comment comment) {
-        Comment newComment = commentService.addComment(taskId, comment);
-        return ResponseEntity.ok(newComment);
+    public ResponseEntity<CommentDTO> addComment(@PathVariable UUID taskId, @RequestBody CommentDTO commentDTO) {
+        Comment newComment = commentService.addComment(taskId, commentDTO);
+        CommentDTO responseDTO = commentService.convertToDTO(newComment);
+        return ResponseEntity.ok(responseDTO);
     }
 }

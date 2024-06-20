@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.3.xsd">
+
+    <changeSet id="1" author="Ada">
+        <createTable tableName="worker">
+            <column name="uuid" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="firstname" type="varchar(50)"/>
+            <column name="lastname" type="varchar(50)"/>
+            <column name="email" type="varchar(50)"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="2" author="Ada">
+        <createTable tableName="project">
+            <column name="uuid" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="varchar(255)"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="3" author="Ada">
+        <createTable tableName="worker_project">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="worker_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_workerproject_worker" references="Worker(uuid)"/>
+            </column>
+            <column name="project_id" type="uuid">
+                <constraints nullable="false" foreignKeyName="fk_workerproject_project" references="Project(uuid)"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="4" author="Ada">
+        <createTable tableName="task">
+            <column name="uuid" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="title" type="varchar(255)"/>
+            <column name="short_description" type="varchar(255)"/>
+            <column name="long_description" type="varchar(1000)"/>
+            <column name="deadline" type="date"/>
+
+            <column name="created_by_uuid" type="uuid">
+                <constraints foreignKeyName="fk_task_createdby" references="Worker(uuid)"/>
+            </column>
+            <column name="assign_to_uuid" type="uuid">
+                <constraints foreignKeyName="fk_task_assignto" references="Worker(uuid)"/>
+            </column>
+            <column name="status" type="varchar(50)"/>
+            <column name="project_uuid" type="uuid">
+                <constraints foreignKeyName="fk_task_project" references="Project(uuid)"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="5" author="you">
+        <createTable tableName="comment">
+            <column name="uuid" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp"/>
+            <column name="modified_at" type="timestamp"/>
+            <column name="content" type="varchar(1000)"/>
+
+            <column name="author_uuid" type="uuid">
+                <constraints foreignKeyName="fk_comment_author" references="Worker(uuid)"/>
+            </column>
+            <column name="task_uuid" type="uuid">
+                <constraints foreignKeyName="fk_comment_task" references="Task(uuid)"/>
+            </column>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>
