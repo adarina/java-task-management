@@ -4,160 +4,158 @@ import com.ada.javataskmanagement.project.model.Project;
 import com.ada.javataskmanagement.project.repository.ProjectRepository;
 import com.ada.javataskmanagement.task.model.Task;
 import com.ada.javataskmanagement.task.model.TaskStatus;
-import com.ada.javataskmanagement.task.repository.TaskRepository;
 import com.ada.javataskmanagement.task.service.TaskService;
-import com.ada.javataskmanagement.worker.model.Worker;
+import com.ada.javataskmanagement.task.repository.TaskRepository;
+import com.ada.javataskmanagement.task.validation.*;
 import com.ada.javataskmanagement.worker.service.WorkerService;
-import com.ada.javataskmanagement.workerproject.model.WorkerProject;
 import com.ada.javataskmanagement.workerproject.repository.WorkerProjectRepository;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.annotation.Transactional;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
-import java.time.LocalDate;
-import java.time.ZoneId;
+import java.util.Optional;
 import java.util.UUID;
 
-@SpringBootTest
-@Transactional
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
 public class TaskServiceTest {
 
-    @Autowired
-    private TaskService taskService;
-
-    @Autowired
+    @Mock
     private TaskRepository taskRepository;
 
-    @Autowired
+    @Mock
     private ProjectRepository projectRepository;
 
-    @Autowired
-    private WorkerService workerService;
-
-    @Autowired
+    @Mock
     private WorkerProjectRepository workerProjectRepository;
 
-    private Worker defaultWorker;
-    private Project defaultProject;
+    @Mock
+    private WorkerService workerService;
+
+    @Mock
+    private Clock clock;
+
+    @InjectMocks
+    private TaskService taskService;
 
     @BeforeEach
-    public void setUp() {
-        defaultWorker = new Worker();
-        defaultWorker.setFirstname("Marek");
-        defaultWorker.setLastname("Mostowiak");
-        defaultWorker.setEmail("mm@sth.com");
-        defaultWorker = workerService.addWorker(defaultWorker);
-
-        defaultProject = new Project();
-        defaultProject.setName("Default Project");
-        defaultProject.setDescription("Description of the default project.");
-        defaultProject = projectRepository.save(defaultProject);
-
-        workerProjectRepository.save(new WorkerProject(defaultWorker, defaultProject));
+    void setUp() {
+        TaskValidator taskValidator = TaskValidator.link(
+                new ShortDescriptionTaskValidator(),
+                new ProjectTaskValidator(),
+                new DeadlineTaskValidator(clock),
+                new WorkerInProjectTaskValidator(workerProjectRepository)
+        );
+        taskService = new TaskService(taskRepository, projectRepository, workerProjectRepository, workerService, null, clock);
     }
 
     @Test
-    public void should_CreateTask_When_ValidTask() {
-
+    void shouldThrowExceptionWhenTaskValidationFails() {
         Task task = new Task();
-        task.setTitle("Task");
-        task.setShortDescription("Short description");
-        task.setLongDescription("Long description");
-        task.setDeadline(LocalDate.now(Clock.system(ZoneId.of("UTC"))).plusDays(5));
-        task.setCreatedBy(defaultWorker);
-        task.setProject(defaultProject);
 
-        Task savedTask = taskService.createTask(task);
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> taskService.createTask(task));
 
-        Assertions.assertNotNull(savedTask.getUuid());
-        Assertions.assertEquals("Task", savedTask.getTitle());
-        Assertions.assertEquals("Short description", savedTask.getShortDescription());
-        Assertions.assertEquals("Long description", savedTask.getLongDescription());
-        Assertions.assertEquals(LocalDate.now(Clock.system(ZoneId.of("UTC"))).plusDays(5), savedTask.getDeadline());
-        Assertions.assertEquals(defaultWorker.getUuid(), savedTask.getCreatedBy().getUuid());
-        Assertions.assertEquals(defaultProject.getUuid(), savedTask.getProject().getUuid());
+        assertEquals("Task validation failed", exception.getMessage());
     }
 
     @Test
-    public void should_ThrowException_When_CreateTaskWithInvalidProject() {
-        Task task = new Task();
-        task.setTitle("Sample Task");
-        task.setShortDescription("Short description.");
-        task.setLongDescription("Long description");
-        task.setDeadline(LocalDate.now(Clock.system(ZoneId.of("UTC"))).plusDays(5));
-        task.setCreatedBy(defaultWorker);
+    void shouldThrowExceptionWhenTaskIdIsNullForSetDefaultStatus() {
+        UUID taskId = null;
+        TaskStatus status = TaskStatus.TO_DO;
 
-        Assertions.assertThrows(IllegalArgumentException.class, () -> {
-            taskService.createTask(task);
-        });
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> taskService.setDefaultStatus(taskId, status));
+
+        assertEquals("Task not found", exception.getMessage());
     }
 
     @Test
-    public void should_ThrowException_When_CreateTaskWithLongDescription() {
+    void shouldThrowExceptionWhenTaskNotFoundForSetDefaultStatus() {
+        UUID taskId = UUID.randomUUID();
+        TaskStatus status = TaskStatus.TO_DO;
 
-        Task task = new Task();
-        task.setTitle("Task");
-        task.setShortDescription("This is a very long short description that exceeds one hundred characters and should therefore throw an exception.");
-        task.setLongDescription("This is a long description");
-        task.setDeadline(LocalDate.now(Clock.system(ZoneId.of("UTC"))).plusDays(5));
-        task.setCreatedBy(defaultWorker);
-        task.setProject(defaultProject);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
 
-        Assertions.assertThrows(IllegalArgumentException.class, () -> {
-            taskService.createTask(task);
-        });
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> taskService.setDefaultStatus(taskId, status));
+
+        assertEquals("Task not found", exception.getMessage());
     }
 
     @Test
-    public void should_ThrowException_When_CreateTaskWithPastDeadline() {
+    void shouldThrowExceptionWhenTaskNotFoundForSetPriority() {
+        UUID taskId = UUID.randomUUID();
+        TaskStatus status = TaskStatus.IN_PROGRESS;
 
-        Task task = new Task();
-        task.setTitle("Task");
-        task.setShortDescription("Short description.");
-        task.setLongDescription("Long description");
-        task.setDeadline(LocalDate.now(Clock.system(ZoneId.of("UTC"))).minusDays(1));
-        task.setCreatedBy(defaultWorker);
-        task.setProject(defaultProject);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
 
-        Assertions.assertThrows(IllegalArgumentException.class, () -> {
-            taskService.createTask(task);
-        });
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> taskService.setPriority(taskId, status));
+
+        assertEquals("Task not found", exception.getMessage());
     }
 
     @Test
-    public void should_SetTaskStatus_When_ValidTaskStatus() {
-        Task task = new Task();
-        task.setTitle("Task");
-        task.setShortDescription("Short description.");
-        task.setLongDescription("Long description");
-        task.setDeadline(LocalDate.now(Clock.system(ZoneId.of("UTC"))).plusDays(5));
-        task.setCreatedBy(defaultWorker);
-        task.setProject(defaultProject);
-        Task savedTask = taskRepository.save(task);
+    void shouldThrowExceptionWhenTaskNotFoundForAddDescription() {
+        UUID taskId = UUID.randomUUID();
+        String description = "Detailed task description";
 
-        Task updatedTask = taskService.setStatus(savedTask.getUuid(), TaskStatus.IN_PROGRESS);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
 
-        Assertions.assertEquals(TaskStatus.IN_PROGRESS, updatedTask.getStatus());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> taskService.addDescription(taskId, description));
+
+        assertEquals("Task not found", exception.getMessage());
     }
 
     @Test
-    public void should_AssignWorkerToTask_When_ValidWorkerAndTask() {
+    void shouldThrowExceptionWhenTaskNotFoundForSetStatus() {
+        UUID taskId = UUID.randomUUID();
+        TaskStatus status = TaskStatus.DONE;
 
+        when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> taskService.setStatus(taskId, status));
+
+        assertEquals("Task not found", exception.getMessage());
+    }
+
+    @Test
+    void shouldThrowExceptionWhenTaskNotFoundForAssignWorker() {
+        UUID taskId = UUID.randomUUID();
+        UUID workerId = UUID.randomUUID();
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> taskService.assignWorker(taskId, workerId));
+
+        assertEquals("Task not found", exception.getMessage());
+    }
+
+    @Test
+    void shouldThrowExceptionWhenWorkerNotFoundForAssignWorker() {
+        UUID taskId = UUID.randomUUID();
+        UUID workerId = UUID.randomUUID();
         Task task = new Task();
-        task.setTitle("Task");
-        task.setShortDescription("Short description.");
-        task.setLongDescription("Long description");
-        task.setDeadline(LocalDate.now(Clock.system(ZoneId.of("UTC"))).plusDays(5));
-        task.setCreatedBy(defaultWorker);
-        task.setProject(defaultProject);
-        Task savedTask = taskRepository.save(task);
+        Project project = new Project();
+        project.setUuid(UUID.randomUUID());
+        task.setProject(project);
 
-        Task updatedTask = taskService.assignWorker(savedTask.getUuid(), defaultWorker.getUuid());
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(workerService.findWorkerById(workerId)).thenReturn(null);
 
-        Assertions.assertEquals(defaultWorker.getUuid(), updatedTask.getAssignTo().getUuid());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> taskService.assignWorker(taskId, workerId));
+
+        assertEquals("Worker not found", exception.getMessage());
     }
 }

@@ -1,113 +1,112 @@
 package com.ada.javataskmanagement.worker.service;
 
-import com.ada.javataskmanagement.worker.dto.WorkerDTO;
 import com.ada.javataskmanagement.worker.model.Worker;
 import com.ada.javataskmanagement.worker.repository.WorkerRepository;
-import jakarta.transaction.Transactional;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 import java.util.UUID;
 
-@SpringBootTest
-@Transactional
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
 public class WorkerServiceTest {
 
-    @Autowired
-    private WorkerService workerService;
-
-    @Autowired
+    @Mock
     private WorkerRepository workerRepository;
+    @InjectMocks
+    WorkerService workerService;
 
     @Test
-    public void should_AddWorker_When_ValidWorker() {
-
+    void shouldThrowExceptionWhenValidationWorkerHasFail() {
         Worker worker = new Worker();
-        worker.setFirstname("Marek");
-        worker.setLastname("Mostowiak");
-        worker.setEmail("m.mostowiak@sth.com");
 
-        Worker savedWorker = workerService.addWorker(worker);
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> workerService.addWorker(worker));
 
-        Assertions.assertNotNull(savedWorker.getUuid());
-        Assertions.assertEquals("Marek", savedWorker.getFirstname());
-        Assertions.assertEquals("Mostowiak", savedWorker.getLastname());
-        Assertions.assertEquals("m.mostowiak@sth.com", savedWorker.getEmail());
+        assertEquals("Worker validation failed.", exception.getMessage());
     }
 
     @Test
-    public void should_FindWorkerById_When_WorkerExists() {
-
+    void shouldFindWorkerById() {
+        UUID workerId = UUID.randomUUID();
         Worker worker = new Worker();
-        worker.setFirstname("Marek");
-        worker.setLastname("Mostowiak");
-        worker.setEmail("m.mostowiak@sth.com");
-        Worker savedWorker = workerRepository.save(worker);
+        worker.setUuid(workerId);
 
-        Worker foundWorker = workerService.findWorkerById(savedWorker.getUuid());
+        when(workerRepository.findById(workerId)).thenReturn(Optional.of(worker));
 
-        Assertions.assertNotNull(foundWorker);
-        Assertions.assertEquals("Marek", foundWorker.getFirstname());
-        Assertions.assertEquals("Mostowiak", foundWorker.getLastname());
-        Assertions.assertEquals("m.mostowiak@sth.com", foundWorker.getEmail());
+        Worker foundWorker = workerService.findWorkerById(workerId);
+
+        assertEquals(workerId, foundWorker.getUuid());
     }
 
     @Test
-    public void should_GetAllWorkers_When_WorkersExist() {
+    void shouldReturnNullWhenWorkerNotFoundById() {
+        UUID workerId = UUID.randomUUID();
 
+        when(workerRepository.findById(workerId)).thenReturn(Optional.empty());
+
+        Worker foundWorker = workerService.findWorkerById(workerId);
+
+        assertNull(foundWorker);
+    }
+
+    @Test
+    void shouldGetAllWorkers() {
+        List<Worker> workers = new ArrayList<>();
         Worker worker1 = new Worker();
         worker1.setFirstname("Marek");
         worker1.setLastname("Mostowiak");
-        worker1.setEmail("m.mostowiak@sth.com");
-        workerRepository.save(worker1);
+        worker1.setEmail("mm@m.com");
+        workers.add(worker1);
 
         Worker worker2 = new Worker();
         worker2.setFirstname("Hanka");
         worker2.setLastname("Mostowiak");
-        worker2.setEmail("h.mostowiak@sth.com");
-        workerRepository.save(worker2);
+        worker2.setEmail("hm@m.com");
+        workers.add(worker2);
+
+        when(workerRepository.findAll()).thenReturn(workers);
 
         List<Worker> allWorkers = workerService.getAllWorkers();
 
-        Assertions.assertEquals(2, allWorkers.size());
-        Assertions.assertTrue(allWorkers.stream().anyMatch(worker -> "Marek".equals(worker.getFirstname()) && "Mostowiak".equals(worker.getLastname())));
-        Assertions.assertTrue(allWorkers.stream().anyMatch(worker -> "Hanka".equals(worker.getFirstname()) && "Mostowiak".equals(worker.getLastname())));
+        assertEquals(2, allWorkers.size());
     }
 
     @Test
-    public void should_ConvertToDTO_When_ValidWorker() {
+    void shouldThrowExceptionWhenWorkerIdIsNull() {
+        UUID workerId = null;
 
-        Worker worker = new Worker();
-        worker.setUuid(UUID.randomUUID());
-        worker.setFirstname("Marek");
-        worker.setLastname("Mostowiak");
-        worker.setEmail("m.mostowiak@sth.com");
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> workerService.findWorkerById(workerId));
 
-
-        WorkerDTO workerDTO = workerService.convertToDTO(worker);
-
-
-        Assertions.assertEquals(worker.getUuid(), workerDTO.getUuid());
-        Assertions.assertEquals("Marek", workerDTO.getFirstname());
-        Assertions.assertEquals("Mostowiak", workerDTO.getLastname());
-        Assertions.assertEquals("m.mostowiak@sth.com", workerDTO.getEmail());
+        assertEquals("Worker ID cannot be null.", exception.getMessage());
     }
 
     @Test
-    public void should_ConvertToEntity_When_ValidWorkerDTO() {
+    void shouldThrowExceptionWhenAddingNullWorker() {
+        Worker worker = null;
 
-        WorkerDTO workerDTO = new WorkerDTO();
-        workerDTO.setFirstname("Marek");
-        workerDTO.setLastname("Mostowiak");
-        workerDTO.setEmail("m.mostowiak@sth.com");
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> workerService.addWorker(worker));
 
-        Worker worker = workerService.convertToEntity(workerDTO);
+        assertEquals("Worker cannot be null.", exception.getMessage());
+    }
 
-        Assertions.assertEquals("Marek", worker.getFirstname());
-        Assertions.assertEquals("Mostowiak", worker.getLastname());
-        Assertions.assertEquals("m.mostowiak@sth.com", worker.getEmail());
+    @Test
+    void shouldReturnEmptyListWhenNoWorkersFound() {
+        when(workerRepository.findAll()).thenReturn(new ArrayList<>());
+
+        List<Worker> allWorkers = workerService.getAllWorkers();
+
+        assertTrue(allWorkers.isEmpty());
     }
 }

@@ -5,126 +5,184 @@ import com.ada.javataskmanagement.project.model.Project;
 import com.ada.javataskmanagement.project.repository.ProjectRepository;
 import com.ada.javataskmanagement.worker.model.Worker;
 import com.ada.javataskmanagement.worker.service.WorkerService;
-import com.ada.javataskmanagement.workerproject.model.WorkerProject;
 import com.ada.javataskmanagement.workerproject.repository.WorkerProjectRepository;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.annotation.Transactional;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
-@SpringBootTest
-@Transactional
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
+
+
+@ExtendWith(MockitoExtension.class)
 public class ProjectServiceTest {
 
-    @Autowired
+    @Mock
+    ProjectRepository projectRepository;
+
+    @Mock
+    WorkerService workerService;
+
+    @Mock
+    WorkerProjectRepository workerProjectRepository;
+
+    @InjectMocks
     private ProjectService projectService;
 
-    @Autowired
-    private ProjectRepository projectRepository;
-
-    @Autowired
-    private WorkerService workerService;
-
-    @Autowired
-    private WorkerProjectRepository workerProjectRepository;
-
     @Test
-    public void should_AddProject_When_ValidProject() {
-        Project project = new Project();
-        project.setName("Project");
-        project.setDescription("Test");
+    void shouldThrowExceptionWhenProjectNotFound() {
+        UUID projectId = UUID.randomUUID();
+        UUID workerId = UUID.randomUUID();
 
-        Project savedProject = projectService.addProject(project);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.empty());
 
-        Assertions.assertNotNull(savedProject.getUuid());
-        Assertions.assertEquals("Project", savedProject.getName());
-        Assertions.assertEquals("Test", savedProject.getDescription());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> projectService.addWorkerToProject(projectId, workerId));
+
+        assertEquals("Project not found", exception.getMessage());
     }
 
     @Test
-    public void should_FindProjectById_When_ProjectExists() {
+    void shouldThrowExceptionWhenWorkerNotFound() {
+        UUID projectId = UUID.randomUUID();
+        UUID workerId = UUID.randomUUID();
         Project project = new Project();
-        project.setName("Project");
-        project.setDescription("Test");
-        Project savedProject = projectRepository.save(project);
+        project.setUuid(projectId);
 
-        Project foundProject = projectService.findProjectById(savedProject.getUuid());
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        when(workerService.findWorkerById(workerId)).thenReturn(null);
 
-        Assertions.assertNotNull(foundProject);
-        Assertions.assertEquals("Project", foundProject.getName());
-        Assertions.assertEquals("Test", foundProject.getDescription());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> projectService.addWorkerToProject(projectId, workerId));
+
+        assertEquals("Worker not found", exception.getMessage());
     }
 
     @Test
-    public void should_GetAllProjects_When_ProjectsExist() {
+    void shouldAddWorkerToProject() {
+        UUID projectId = UUID.randomUUID();
+        UUID workerId = UUID.randomUUID();
+        Project project = new Project();
+        project.setUuid(projectId);
+        project.setName("Marek");
+        Worker worker = new Worker();
+        worker.setUuid(workerId);
+
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        when(workerService.findWorkerById(workerId)).thenReturn(worker);
+        when(workerProjectRepository.existsByWorkerUuidAndProjectUuid(workerId, projectId)).thenReturn(false);
+
+        Project result = projectService.addWorkerToProject(projectId, workerId);
+
+        assertEquals(projectId, result.getUuid());
+    }
+
+    @Test
+    void shouldNotAddWorkerToProjectWhenAlreadyAssigned() {
+        UUID projectId = UUID.randomUUID();
+        UUID workerId = UUID.randomUUID();
+        Project project = new Project();
+        project.setUuid(projectId);
+        Worker worker = new Worker();
+        worker.setUuid(workerId);
+
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        when(workerService.findWorkerById(workerId)).thenReturn(worker);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> projectService.addWorkerToProject(projectId, workerId));
+
+        assertEquals("Project validation failed.", exception.getMessage());
+
+    }
+
+    @Test
+    void shouldAddProject() {
+        Project project = new Project();
+        project.setName("Test Project");
+
+        when(projectRepository.save(project)).thenReturn(project);
+
+        Project result = projectService.addProject(project);
+
+        assertEquals("Test Project", result.getName());
+    }
+
+    @Test
+    void shouldFindProjectById() {
+        UUID projectId = UUID.randomUUID();
+        Project project = new Project();
+        project.setUuid(projectId);
+
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+
+        Project result = projectService.findProjectById(projectId);
+
+        assertEquals(projectId, result.getUuid());
+    }
+
+    @Test
+    void shouldReturnNullWhenProjectNotFoundById() {
+        UUID projectId = UUID.randomUUID();
+
+        when(projectRepository.findById(projectId)).thenReturn(Optional.empty());
+
+        Project result = projectService.findProjectById(projectId);
+
+        assertNull(result);
+    }
+
+    @Test
+    void shouldGetAllProjects() {
+        List<Project> projects = new ArrayList<>();
         Project project1 = new Project();
         project1.setName("Project 1");
-        project1.setDescription("First test");
-        projectRepository.save(project1);
+        projects.add(project1);
 
         Project project2 = new Project();
         project2.setName("Project 2");
-        project2.setDescription("Second test");
-        projectRepository.save(project2);
+        projects.add(project2);
+
+        when(projectRepository.findAll()).thenReturn(projects);
 
         List<Project> allProjects = projectService.getAllProjects();
-        Assertions.assertEquals(2, allProjects.size());
-        Assertions.assertTrue(allProjects.stream().anyMatch(p -> "Project 1".equals(p.getName()) && "First test".equals(p.getDescription())));
-        Assertions.assertTrue(allProjects.stream().anyMatch(p -> "Project 2".equals(p.getName()) && "Second test".equals(p.getDescription())));
+
+        assertNotNull(allProjects);
+        assertEquals(2, allProjects.size());
+        assertEquals("Project 1", allProjects.get(0).getName());
+        assertEquals("Project 2", allProjects.get(1).getName());
     }
 
     @Test
-    public void should_ConvertToDTO_When_ValidProject() {
+    void shouldConvertToDTO() {
         Project project = new Project();
         project.setUuid(UUID.randomUUID());
-        project.setName("Project");
-        project.setDescription("Test");
+        project.setName("Test Project");
+        project.setDescription("Test Description");
 
         ProjectDTO projectDTO = projectService.convertToDTO(project);
 
-        Assertions.assertEquals(project.getUuid(), projectDTO.getUuid());
-        Assertions.assertEquals("Project", projectDTO.getName());
-        Assertions.assertEquals("Test", projectDTO.getDescription());
+        assertEquals(project.getUuid(), projectDTO.getUuid());
+        assertEquals("Test Project", projectDTO.getName());
+        assertEquals("Test Description", projectDTO.getDescription());
     }
 
     @Test
-    public void should_ConvertToEntity_When_ValidProjectDTO() {
+    void shouldConvertToEntity() {
         ProjectDTO projectDTO = new ProjectDTO();
-        projectDTO.setName("Project");
-        projectDTO.setDescription("Test");
+        projectDTO.setName("Test Project");
+        projectDTO.setDescription("Test Description");
 
         Project project = projectService.convertToEntity(projectDTO);
 
-        Assertions.assertEquals("Project", project.getName());
-        Assertions.assertEquals("Test", project.getDescription());
+        assertEquals("Test Project", project.getName());
+        assertEquals("Test Description", project.getDescription());
     }
-
-    @Test
-    public void should_AddWorkerToProject_When_ValidWorkerAndProject() {
-
-        Project project = new Project();
-        project.setName("Project with Workers");
-        project.setDescription("Project description with workers.");
-        Project savedProject = projectRepository.save(project);
-
-        Worker worker = new Worker();
-        worker.setFirstname("M");
-        worker.setLastname("M");
-        worker.setEmail("mm@sth.com");
-        Worker savedWorker = workerService.addWorker(worker);
-
-        Project updatedProject = projectService.addWorkerToProject(savedProject.getUuid(), savedWorker.getUuid());
-
-        List<WorkerProject> workerProjects = workerProjectRepository.findAll();
-        boolean workerAssigned = workerProjects.stream()
-                .anyMatch(wp -> wp.getWorker().getUuid().equals(savedWorker.getUuid()) &&
-                        wp.getProject().getUuid().equals(savedProject.getUuid()));
-
-        Assertions.assertTrue(workerAssigned);
-    }
-
 }

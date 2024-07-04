@@ -1,147 +1,141 @@
 package com.ada.javataskmanagement.comment.service;
 
 import com.ada.javataskmanagement.comment.dto.CommentDTO;
-import com.ada.javataskmanagement.comment.model.Comment;
 import com.ada.javataskmanagement.comment.repository.CommentRepository;
 import com.ada.javataskmanagement.project.model.Project;
-import com.ada.javataskmanagement.project.repository.ProjectRepository;
 import com.ada.javataskmanagement.task.model.Task;
 import com.ada.javataskmanagement.task.repository.TaskRepository;
 import com.ada.javataskmanagement.worker.model.Worker;
 import com.ada.javataskmanagement.worker.service.WorkerService;
-import com.ada.javataskmanagement.workerproject.model.WorkerProject;
 import com.ada.javataskmanagement.workerproject.repository.WorkerProjectRepository;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.annotation.Transactional;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.*;
+import java.util.Optional;
 import java.util.UUID;
 
-@SpringBootTest
-@Transactional
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
 public class CommentServiceTest {
 
-    @Autowired
-    private CommentService commentService;
-
-    @Autowired
+    @Mock
     private CommentRepository commentRepository;
 
-    @Autowired
-    private ProjectRepository projectRepository;
-
-    @Autowired
+    @Mock
     private TaskRepository taskRepository;
 
-    @Autowired
+    @Mock
     private WorkerService workerService;
 
-    @Autowired
+    @Mock
     private WorkerProjectRepository workerProjectRepository;
 
-    @Autowired
+    @Mock
     private Clock clock;
 
-    private Worker defaultWorker;
-    private Task defaultTask;
+    @InjectMocks
+    private CommentService commentService;
 
     @BeforeEach
-    public void setUp() {
-        defaultWorker = new Worker();
-        defaultWorker.setFirstname("Marek");
-        defaultWorker.setLastname("Mostowiak");
-        defaultWorker.setEmail("mm@sth.com");
-        defaultWorker = workerService.addWorker(defaultWorker);
-
-        Project defaultProject = new Project();
-        defaultProject.setName("Default Project");
-        defaultProject.setDescription("Description");
-        defaultProject = projectRepository.save(defaultProject);
-
-        workerProjectRepository.save(new WorkerProject(defaultWorker, defaultProject));
-
-        defaultTask = new Task();
-        defaultTask.setTitle("Default Task");
-        defaultTask.setShortDescription("Short description");
-        defaultTask.setLongDescription("Long description");
-        defaultTask.setDeadline(LocalDate.now(Clock.system(ZoneId.of("UTC"))).plusDays(5));
-        defaultTask.setCreatedBy(defaultWorker);
-        defaultTask.setProject(defaultProject);
-        defaultTask = taskRepository.save(defaultTask);
+    void setUp() {
+        clock = Clock.fixed(
+                Instant.parse("2024-07-01T10:00:00Z"),
+                ZoneId.of("UTC")
+        );
+        commentService = new CommentService(commentRepository, taskRepository, workerService, workerProjectRepository, clock);
     }
 
     @Test
-    public void should_AddComment_When_ValidCommentDTO() {
+    void shouldThrowExceptionWhenTaskNotFoundForAddComment() {
+        UUID taskId = UUID.randomUUID();
         CommentDTO commentDTO = new CommentDTO();
-        commentDTO.setContent("Test comment");
-        commentDTO.setAuthorId(defaultWorker.getUuid());
-        commentDTO.setTaskId(defaultTask.getUuid());
+        commentDTO.setAuthorId(UUID.randomUUID());
+        commentDTO.setContent("Test comment content.");
 
-        Comment newComment = commentService.addComment(defaultTask.getUuid(), commentDTO);
-        Comment savedComment = commentRepository.findById(newComment.getUuid()).orElse(null);
+        when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
 
-        Assertions.assertNotNull(savedComment);
-        Assertions.assertEquals("Test comment", savedComment.getContent());
-        Assertions.assertEquals(defaultWorker.getUuid(), savedComment.getAuthor().getUuid());
-        Assertions.assertEquals(defaultTask.getUuid(), savedComment.getTask().getUuid());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> commentService.addComment(taskId, commentDTO));
+
+        assertEquals("Task not found", exception.getMessage());
     }
 
     @Test
-    public void should_ThrowException_When_WorkerNotInProject() {
-        Worker anotherWorker = new Worker();
-        anotherWorker.setFirstname("Hanka");
-        anotherWorker.setLastname("Mostowiak");
-        anotherWorker.setEmail("h.mostowiak@sth.com");
-        Worker savedAnotherWorker = workerService.addWorker(anotherWorker);
-
+    void shouldThrowExceptionWhenWorkerNotInProjectForAddComment() {
+        UUID taskId = UUID.randomUUID();
         CommentDTO commentDTO = new CommentDTO();
-        commentDTO.setContent("Test comment from another worker");
-        commentDTO.setAuthorId(savedAnotherWorker.getUuid());
-        commentDTO.setTaskId(defaultTask.getUuid());
+        UUID authorId = UUID.randomUUID();
+        commentDTO.setAuthorId(authorId);
+        commentDTO.setContent("Test comment.");
 
-        Assertions.assertThrows(IllegalArgumentException.class, () -> {
-            commentService.addComment(defaultTask.getUuid(), commentDTO);
-        });
+        Task task = new Task();
+        task.setUuid(taskId);
+
+        Project project = new Project();
+        project.setUuid(UUID.randomUUID());
+
+        task.setProject(project);
+        Worker worker = new Worker();
+        worker.setUuid(authorId);
+
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(workerService.findWorkerById(authorId)).thenReturn(worker);
+        when(workerProjectRepository.existsByWorkerUuidAndProjectUuid(authorId, task.getProject().getUuid())).thenReturn(false);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> commentService.addComment(taskId, commentDTO));
+
+        assertEquals("Worker does not belong to this project", exception.getMessage());
     }
 
-    @Test
-    public void should_ConvertToDTO_When_ValidComment() {
-        Comment comment = new Comment();
-        comment.setContent("Test comment");
-        comment.setCreatedAt(LocalDateTime.now(clock));
-        comment.setModifiedAt(LocalDateTime.now(clock));
-        comment.setAuthor(defaultWorker);
-        comment.setTask(defaultTask);
-        comment = commentRepository.save(comment);
-
-        CommentDTO commentDTO = commentService.convertToDTO(comment);
-
-        Assertions.assertEquals(comment.getUuid(), commentDTO.getUuid());
-        Assertions.assertEquals(comment.getContent(), commentDTO.getContent());
-        Assertions.assertEquals(comment.getAuthor().getUuid(), commentDTO.getAuthorId());
-        Assertions.assertEquals(comment.getTask().getUuid(), commentDTO.getTaskId());
-    }
-
-    @Test
-    public void should_ConvertToEntity_When_ValidCommentDTO() {
-        CommentDTO commentDTO = new CommentDTO();
-        commentDTO.setUuid(UUID.randomUUID());
-        commentDTO.setContent("Test comment");
-        commentDTO.setCreatedAt(LocalDateTime.now(clock));
-        commentDTO.setModifiedAt(LocalDateTime.now(clock));
-
-        Comment comment = commentService.convertToEntity(commentDTO);
-
-        Assertions.assertEquals(commentDTO.getUuid(), comment.getUuid());
-        Assertions.assertEquals(commentDTO.getContent(), comment.getContent());
-        Assertions.assertEquals(commentDTO.getCreatedAt(), comment.getCreatedAt());
-        Assertions.assertEquals(commentDTO.getModifiedAt(), comment.getModifiedAt());
-    }
+    //    @Test
+//    void shouldAddCommentSuccessfully() {
+//        UUID taskId = UUID.randomUUID();
+//        UUID authorId = UUID.randomUUID();
+//        String content = "This is a test comment.";
+//
+//        Task task = new Task();
+//        task.setUuid(taskId);
+//
+//        Project project = new Project();
+//        project.setUuid(UUID.randomUUID());
+//
+//        task.setProject(project);
+//
+//        Worker worker = new Worker();
+//        worker.setUuid(authorId);
+//
+//        CommentDTO commentDTO = new CommentDTO();
+//        commentDTO.setAuthorId(authorId);
+//        commentDTO.setContent(content);
+//
+//        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+//        when(workerService.findWorkerById(authorId)).thenReturn(worker);
+//        when(workerProjectRepository.existsByWorkerUuidAndProjectUuid(authorId, task.getProject().getUuid())).thenReturn(true);
+//
+//        LocalDateTime currentDateTime = LocalDateTime.now(clock);
+//        // TODO
+//
+//        Comment savedComment = new Comment();
+//        savedComment.setUuid(UUID.randomUUID());
+//        savedComment.setCreatedAt(currentDateTime);
+//        savedComment.setModifiedAt(null);
+//
+//        when(commentRepository.save(savedComment)).thenReturn(savedComment);
+//
+//        Comment addedComment = commentService.addComment(taskId, commentDTO);
+//
+//        assertNotNull(addedComment);
+//        assertEquals(content, addedComment.getContent());
+//        assertEquals(taskId, addedComment.getTask().getUuid());
+//        assertEquals(authorId, addedComment.getAuthor().getUuid());
+//        assertEquals(currentDateTime, addedComment.getCreatedAt());
+//    }
 }

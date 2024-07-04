@@ -7,25 +7,29 @@ import com.ada.javataskmanagement.task.dto.TaskDTO;
 import com.ada.javataskmanagement.task.model.Task;
 import com.ada.javataskmanagement.task.model.TaskStatus;
 import com.ada.javataskmanagement.task.repository.TaskRepository;
+import com.ada.javataskmanagement.task.validation.*;
 import com.ada.javataskmanagement.worker.model.Worker;
 import com.ada.javataskmanagement.worker.service.WorkerService;
 import com.ada.javataskmanagement.workerproject.repository.WorkerProjectRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
-import java.time.LocalDate;
 import java.util.UUID;
 
 @Service
 public class TaskService {
 
+    private static final Logger logger = LoggerFactory.getLogger(TaskService.class);
+
     private final TaskRepository taskRepository;
     private final ProjectRepository projectRepository;
     private final WorkerProjectRepository workerProjectRepository;
-
     private final WorkerService workerService;
-
     private final Clock clock;
+    private final TaskValidator taskValidator;
+
 
     public TaskService(TaskRepository taskRepository, ProjectRepository projectRepository, WorkerProjectRepository workerProjectRepository, WorkerService workerService, ProjectService projectService, Clock clock) {
         this.taskRepository = taskRepository;
@@ -33,35 +37,29 @@ public class TaskService {
         this.workerProjectRepository = workerProjectRepository;
         this.workerService = workerService;
         this.clock = clock;
+
+        this.taskValidator = TaskValidator.link(
+                new ShortDescriptionTaskValidator(),
+                new ProjectTaskValidator(),
+                new DeadlineTaskValidator(clock),
+                new WorkerInProjectTaskValidator(workerProjectRepository)
+        );
     }
 
-    private void validateWorkerInProject(UUID projectId, UUID workerId) {
-        boolean exists = workerProjectRepository.existsByWorkerUuidAndProjectUuid(workerId, projectId);
-        if (!exists) {
-            throw new IllegalArgumentException("Worker does not belong to this project");
+    public boolean validateTask(Task task) {
+        boolean isValid = taskValidator.check(task);
+        if (!isValid) {
+            logger.error("Task validation failed: {}", task);
         }
+        return isValid;
     }
 
     public Task createTask(Task task) {
-        if (task.getProject() == null || task.getProject().getUuid() == null) {
-            throw new IllegalArgumentException("Project ID must be provided");
-        }
-        if (task.getShortDescription() != null && task.getShortDescription().length() > 100) {
-            throw new IllegalArgumentException("Short description must be 100 characters or less");
-        }
-        validateWorkerInProject(task.getProject().getUuid(), task.getCreatedBy().getUuid());
-        Worker worker = workerService.findWorkerById(task.getCreatedBy().getUuid());
-        task.setCreatedBy(worker);
-        validateTaskDate(task.getDeadline());
 
+        if (!validateTask(task)) {
+            throw new IllegalArgumentException("Task validation failed");
+        }
         return taskRepository.save(task);
-    }
-
-    private void validateTaskDate(LocalDate deadline) {
-        LocalDate currentDate = LocalDate.now(clock);
-        if (deadline != null && deadline.isBefore(currentDate)) {
-            throw new IllegalArgumentException("Deadline cannot be in the past");
-        }
     }
 
     public Task setDefaultStatus(UUID taskId, TaskStatus status) {
@@ -88,10 +86,20 @@ public class TaskService {
         return taskRepository.save(task);
     }
 
+    private void validateWorkerInProject(UUID projectId, UUID workerId) {
+        boolean exists = workerProjectRepository.existsByWorkerUuidAndProjectUuid(workerId, projectId);
+        if (!exists) {
+            throw new IllegalArgumentException("Worker does not belong to this project.");
+        }
+    }
+
     public Task assignWorker(UUID taskId, UUID workerId) {
         Task task = taskRepository.findById(taskId).orElseThrow(() -> new IllegalArgumentException("Task not found"));
         Worker worker = workerService.findWorkerById(workerId);
-        validateWorkerInProject(task.getProject().getUuid(), workerId);
+        if (worker == null) {
+            throw new IllegalArgumentException("Worker not found");
+        }
+        validateWorkerInProject(task.getProject().getUuid(), worker.getUuid());
         task.setAssignTo(worker);
         return taskRepository.save(task);
     }
